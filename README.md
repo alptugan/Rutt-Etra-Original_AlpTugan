@@ -1,5 +1,7 @@
 # Rutt-Etra-Analog Video Synth v2
 
+[![Click to view see it in action](http://img.youtube.com/vi/NrvNLBjKUM0/0.jpg)](https://www.youtube.com/watch?v=NrvNLBjKUM0)
+
 This repository is a newer version of [Rutt-Etra-analog-video-synth-implementation](https://github.com/alptugan/Rutt-Etra-analog-video-synth-implementation) uploaded in 2015. 
 
 RE-Viser is a software implementation of the amazing Rutt-Etra analog video animation synthesizer from 70s. The Rutt-Etra analog video animation synthesizer was co-invented by Steve Rutt & Bill Etra as an analog computer for video raster manipulation. RE-Viser is written on C++ using open-source library openFrameworks. The application has built-in GUI (Graphical User Interface) to create Rutt & Etra Analog Video Synthesizer style visual effects on imported image/video files. This is an ongoing open-source project. The source files and former beta releases of the application can be downloaded from my [github.com/alptugan] account. I’ve been using Re-Viser on my personal audiovisual performances and updating the source codes time to time. Currently RE-Viser is only available for developers, not suitable for end-users. 
