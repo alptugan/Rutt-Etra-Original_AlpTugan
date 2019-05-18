@@ -1,18 +1,18 @@
 #pragma once
 
 #include "ofMain.h"
-#include "ofxFPSCamera.h"
-#include "ofxGui.h"
-#include "ofxPostGlitch.h"
-#include "ofxCameraMove.h"
-#include "ofxMotionBlurCamera.h"
+// Uncomment the foloowing line to enbale midi - Input
+//#define KORG_ENABLED
 
 #ifdef KORG_ENABLED
 #include "ofxKorgNanoKontrol.h"
 #endif
 
-// Uncomment the foloowing line to enbale midi - Input
-//#define KORG_ENABLED
+#include "ofxGui.h"
+#include "ofxPostGlitch.h"
+#include "ofxCameraMove.h"
+#include "ofxMotionBlurCamera.h"
+#include "ofxProcessFFT.h"
 
 class testApp : public ofBaseApp{
 public:
@@ -31,7 +31,9 @@ public:
     void dragEvent(ofDragInfo dragInfo);
     void gotMessage(ofMessage msg);
     
-
+    // CUSTOM METHODS
+    void setupCameraSaveLoad();
+    void setupVideos();
     
     // GUI
     ofxPanel gui;
@@ -68,15 +70,11 @@ public:
     ofParameter<int> yStep;
     ofParameter<int> xStep;
     ofParameter<float> zMult;
+    ofParameter<float> soundThresMult;
     
     // Glow FX GUI
     ofParameter<int> glowAmount;
     
-    // FX
-    ofxPostGlitch fx;
-    ofFbo fbo;
-    void updateFXParameters();
-
 #ifdef KORG_ENABLED
     // Korg GUI
     ofParameterGroup KorgGui;
@@ -91,82 +89,75 @@ public:
     void sceneButtonPressed(int & _val);
 #endif
     
+    // FX
+    ofxPostGlitch fx;
+    ofFbo fbo;
+    void updateFXParameters();
+    
+    // Video Player
+    vector<ofVideoPlayer> vidPlayer;
+    ofPixels vidPlayerPx;
+    
     // Video Grabber
     ofVideoGrabber 		vidGrabber;
     int 				camWidth;
     int 				camHeight;
+    
+    // Still Image
+    ofImage img;
+    
+    // Main Scene Mesh
+    ofMesh mesh;
+    ofColor meshColor;
+    
+    // Cameras
+    ofxCameraMove saveCam;
+    
+    // Video Directory
+    ofDirectory dirVid;
+    
+    
+    
+    // Random rotation variables
+    ofColor color;
+    
+    ofVec3f pos;
+    ofQuaternion rot;
+    ofMatrix4x4 mat;
+    ofVec3f rotationAxis;
+    
+    ofVec3f defCamPos;
+    ofVec3f contTrans;
+    ofVec3f contRot;
+    ofVec3f camPos;
+    
+    int idVid;               // Video id
+    int bufferCounter;
+    int drawCounter;
+    int curTransX;
+    int curTransY;
+    int curTransZ;
+    
+    float velocity;
+    float size;
+    
+    string mode;
+    string dirVidStr;
     
     // Global Light Options
     ofLight             light;
     
     // Scene Camera
     ofEasyCam cam;
+
+    bool isDebug;
     
-    // Sound Input Analysis Parameters
-    ofSoundStream soundStream;
-    void audioIn(float * input, int bufferSize, int nChannels); 
-    
-    vector <float> left;
-    vector <float> right;
-    vector <float> volHistory;
-    
-    int 	bufferCounter;
-    int 	drawCounter;
-    
-    float smoothedVol;
-    float scaledVol;
     
     
     // Sound Player Analysis Parameters
+    ProcessFFT fft;
     ofSoundPlayer 		mp3;
-    float 				* fftSmoothed;
     
-    int nBandsToGet;
     float prevx, prevy;
-    
-    
-    
-    
-    bool isDebug;
-    
-    ofImage img;
-    string mode;
-    ofVec3f camPos;
-    
-    // Cameras
-    ofxCameraMove saveCam;
-    ofxFPSCamera camera;
-    bool isFPSCamEnabled;
-    
-    // CUSTOM METHODS
-    void setupFPSCam();
-    void setupCameraSaveLoad();
-    
-    // Random rotation variables
-    ofColor color;
-    float velocity;
-    ofVec3f pos;
-    ofQuaternion rot;
-    ofMatrix4x4 mat;
-    ofVec3f rotationAxis;
-    float size;
-    
 
-    
-    
-    //playing video + rutt etra stuff
-    ofVideoPlayer vidPlayer;
-    ofPixels vidPlayerPx;
-    
-    // Main Scene Mesh
-    ofMesh mesh;
-    ofColor meshColor;
-    
-    int curTransX;
-    int curTransY;
-    int curTransZ;
-    
-    ofVec3f defCamPos;
-    ofVec3f contTrans;
-    ofVec3f contRot;
 };

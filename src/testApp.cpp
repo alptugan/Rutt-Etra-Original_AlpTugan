@@ -1,9 +1,10 @@
 #include "testApp.h"
 
 
-//things to do
-//work on fft
-//mode selector on the beginning
+// things to do
+// work on fft
+// smoothing lines
+// fast video switch?
 
 //--------------------------------------------------------------
 void testApp::setup(){
@@ -14,9 +15,7 @@ void testApp::setup(){
     // Hide mouse cursor by default
     ofHideCursor();
     
-    // Enable or Disable FPS cam
-    isFPSCamEnabled = false;
-    
+   
     // Enable or Disable Debug Mode
     isDebug = false;
     
@@ -42,7 +41,8 @@ void testApp::setup(){
     
     gui.add(yStep.set("Vertical Vertex Distance", 5,1,200));
     gui.add(xStep.set("Horizontal Vertex Distance", 2,1,200));
-    gui.add(zMult.set("Z-Depth Vertex",0.3,0,10));
+    gui.add(zMult.set("Z-Depth Vertex",0.3,0,4));
+    gui.add(soundThresMult.set("sound Multiplier Fac", 0.5, 0, 1.));
     gui.add(pLineThickness.set("Mesh Line Thickness",1,1,20));
     
     gui.add(isShowFrame.set("Show Mesh Frame", true));
@@ -105,26 +105,18 @@ void testApp::setup(){
     // Initialize video grabber
     if(mode == "cam") {
         camWidth         =  320;    // try to grab at this size.
-        camHeight         =  240;
+        camHeight        =  240;
         vidGrabber.initGrabber(camWidth,camHeight);
     }
     
     
     // VIDEO::Initialize Video Player
     if(mode == "video") {
-        vidPlayer.load("ISP-Salt_video_footage/v1.mp4");
-        // vidPlayer.play();
-
-        // Set video sound level to 0
-        vidPlayer.setVolume(0);
-        
-        // Default video parameters to set pivot point to center
-        curTransX = -vidPlayer.getWidth()*0.5;
-        curTransY = -vidPlayer.getHeight()*0.5;
+        setupVideos();
     }
     
     
-    // Load Sound
+    // SOUND::Load Sound
     if(isSoundEnabled)
     {
         mp3.load("sounds/ISP_arkaoda_2.wav");
@@ -132,15 +124,9 @@ void testApp::setup(){
         mp3.setPaused(true);
     }
     
-    
-    // Sound Analysis Parameters
-    fftSmoothed = new float[8192];
-    for (int i = 0; i < 8192; i++){
-        fftSmoothed[i] = 0;
-    }
-    
-    nBandsToGet = 1024;
-    
+    // SOUND ANALYZE FFT
+    fft.setup();
+    fft.setNumFFTBins(32);
     
     
     // Create fbo to apply shader FX effects
@@ -150,19 +136,41 @@ void testApp::setup(){
     // Default parameter values
     defCamPos = cam.getPosition();
     
-    // SETUP FPS CAM
-    //setupFPSCam();
-    
+  
     // SETUP CAMERA SAVE & LOAD to load selected camera properties
     setupCameraSaveLoad();
 }
 
-
+void testApp::setupVideos()
+{
+    dirVidStr = "ISP-Salt_video_footage";
+    //dirVidStr = "ISP_haydarpasa";
+    dirVid.listDir(dirVidStr + "/");
+    dirVid.sort(); // in linux the file system doesn't return file lists ordered in alphabetical order
+    
+    //allocate the vector to have as many ofImages as files
+    if( dirVid.size() ){
+        vidPlayer.assign(dirVid.size(), ofVideoPlayer());
+    }
+    
+    // you can now iterate through the files and load them into the ofImage vector
+    for(int i = 0; i < (int)dirVid.size(); i++){
+        vidPlayer[i].load(dirVid.getPath(i));
+        vidPlayer[i].setVolume(0);
+    }
+    idVid = 0;
+    
+    // Default video parameters to set pivot point to center
+    curTransX = -vidPlayer[idVid].getWidth()*0.5;
+    curTransY = -vidPlayer[idVid].getHeight()*0.5;
+}
 
 //--------------------------------------------------------------
 // UPDATE : MAIN
 //--------------------------------------------------------------
 void testApp::update(){
+    // Update FFT sound input analyze
+    fft.update();
     
     // Sound Player
     if(isSoundEnabled) {
@@ -186,9 +194,9 @@ void testApp::update(){
 
     yStep = int(ofMap(nano.getVal(K_SLIDER_2),0,127,2,150));
     xStep = int(ofMap(nano.getVal(K_SLIDER_1),0,127,2,150));
-    
+    /*
     pLineThickness = int(ofMap(nano.getVal(K_SLIDER_3),0,127,2,12));
-    
+    */
     isPointMode = nano.getVal(K_BUTTON_1,K_TYPE_BUTTON);
     isWhiteColor = nano.getVal(K_BUTTON_3,K_TYPE_BUTTON);
 #endif
@@ -203,34 +211,8 @@ void testApp::update(){
     // update the sound playing system:
     ofSoundUpdate();
     
-    float * val = ofSoundGetSpectrum(nBandsToGet);		// request 128 values for fft
-    for (int i = 0;i < nBandsToGet; i++){
-        
-        // let the smoothed calue sink to zero:
-        fftSmoothed[i] *= 0.96f;
-        
-        // take the max, either the smoothed or the incoming:
-        if (fftSmoothed[i] < val[i]) fftSmoothed[i] = val[i];
-        
-    }
-    
     
     //update pixels for mesh
-    
-    
-    //lets scale the vol up to a 0-1 range
-    scaledVol = ofMap(smoothedVol, 0.0, 0.17, 0.0, 1.0, true);
-    
-    //lets record the volume into an array
-    volHistory.push_back( scaledVol );
-    
-    //if we are bigger the the size we want to record - lets drop the oldest value
-    if( volHistory.size() >= 400 ){
-        volHistory.erase(volHistory.begin(), volHistory.begin()+1);
-    }
-    
-    
-    
     if(isPointMode) {
         mesh.setMode(OF_PRIMITIVE_POINTS);
     }else{
@@ -239,45 +221,47 @@ void testApp::update(){
     }
     
     if(mode == "video") {
-        
-        vidPlayer.update();
-        vidPlayerPx = vidPlayer.getPixels();
-        
-        int xy=0;
-        for (int y = 0; y<vidPlayer.getHeight(); y+=yStep){
-
+        if(dirVid.size() > 0) {
+            vidPlayer[idVid].update();
+            vidPlayerPx = vidPlayer[idVid].getPixels();
             
-            for (int x = 0; x < vidPlayer.getWidth(); x += xStep){
+            int xy=0;
+            for (int y = 0; y<vidPlayer[idVid].getHeight(); y+=yStep){
                 
-
-                if(!isWhiteColor) {
-                    meshColor = vidPlayerPx.getColor(x, y);
-                    mesh.addColor(ofColor(meshColor, 255));
-                }else{
-                    meshColor = vidPlayerPx.getColor(x, y).getBrightness();
-                    mesh.addColor(ofColor(meshColor, 255));
+                
+                for (int x = 0; x < vidPlayer[idVid].getWidth(); x += xStep){
+                    
+                    
+                    if(!isWhiteColor) {
+                        meshColor = vidPlayerPx.getColor(x, y);
+                        mesh.addColor(ofColor(meshColor, 255));
+                    }else{
+                        meshColor = vidPlayerPx.getColor(x, y).getBrightness();
+                        mesh.addColor(ofColor(meshColor, 255));
+                    }
+                    
+                    float fftDepth = ofMap(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
+                    //cout << fft.getIntensityAtFrequency(fftDepth) << endl;
+                    mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getIntensityAtFrequency(fftDepth) * soundThresMult)));
+                    //curColor.getBrightness() * .3 + scaledVol));
+                    
+                    if(x == 0) {
+                        mesh.addIndex(xy);
+                    }
+                    
+                    if(x != 0 && x != vidPlayer[idVid].getWidth()-xStep) {
+                        mesh.addIndex(xy);
+                        mesh.addIndex(xy);
+                    }
+                    
+                    if(x >= vidPlayer[idVid].getWidth()-xStep) {
+                        mesh.addIndex(xy);
+                    }
+                    xy = xy + 1;
                 }
-                
-                
-                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * zMult  /*+ fftSmoothed[y]*300.f*/));
-                //curColor.getBrightness() * .3 + scaledVol));
-                
-                if(x == 0) {
-                    mesh.addIndex(xy);
-                }
-                
-                if(x != 0 && x != vidPlayer.getWidth()-xStep) {
-                    mesh.addIndex(xy);
-                    mesh.addIndex(xy);
-                }
-                
-                if(x >= vidPlayer.getWidth()-xStep) {
-                    mesh.addIndex(xy);
-                }
-                
-                xy = xy + 1;
-                
             }
+        }else{
+            cout << "There is no video file in the " << dirVidStr << " folder" << endl;
         }
     }
     
@@ -289,7 +273,7 @@ void testApp::update(){
         vidPlayerPx = img.getPixels();
         for (int y = 0; y<img.getHeight(); y+=yStep){
             ofNoFill();
-            ofSetLineWidth(2);
+            
             
             for (int x = 0; x < img.getWidth(); x += xStep){
                 
@@ -304,7 +288,7 @@ void testApp::update(){
                     mesh.addColor(ofColor(meshColor, 255));
                 }
                 
-                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * zMult + fftSmoothed[y]*300.f));
+                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getMidVal())));
 
                 
                 if(x == 0 || x == img.getWidth()-1) {
@@ -378,8 +362,6 @@ void testApp::draw(){
     
     //ofTranslate(0, ofGetHeight()*0.5);
     cam.begin();
-    // FPS CAM
-    if(isFPSCamEnabled) camera.begin();
     ofClear(0,0,0,0);
     
     glEnable(GL_DEPTH_TEST);
@@ -405,10 +387,10 @@ void testApp::draw(){
             ofPushStyle();
             ofNoFill();
             ofSetColor(200,0,0);
-        //ofDrawRectangle(curTransX, curTransY, curTransZ, vidPlayer.getWidth(),vidPlayer.getHeight());
+            //ofDrawRectangle(curTransX, curTransY, curTransZ, vidPlayer.getWidth(),vidPlayer.getHeight());
             
-            ofDrawBox(curTransX + vidPlayer.getWidth() * 0.5, curTransY + vidPlayer.getHeight() * 0.5, curTransZ , vidPlayer.getWidth(), vidPlayer.getHeight(), depth);
-        ofPopStyle();
+            ofDrawBox(curTransX + vidPlayer[idVid].getWidth() * 0.5, curTransY + vidPlayer[idVid].getHeight() * 0.5, curTransZ , vidPlayer[idVid].getWidth(), vidPlayer[idVid].getHeight(), depth);
+            ofPopStyle();
         }
         
         // if easycam y=-1
@@ -418,10 +400,13 @@ void testApp::draw(){
         //ofTranslate(contTransX, contTransY, contTransZ);
         
         //ofLog() << "cam position: " << cam.getPosition();
-        ofTranslate(curTransX, curTransY, curTransZ- depth*0.5);
+        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
+        
         
     }
     
+    
+    // DRAW MESH
     ofPushStyle();
     ofNoFill();
     ofSetLineWidth(pLineThickness);
@@ -434,9 +419,6 @@ void testApp::draw(){
     
 
     cam.end();
-    
-    // FPS CAM
-    if(isFPSCamEnabled) camera.end();
     
     fbo.end();
     
@@ -451,16 +433,42 @@ void testApp::draw(){
     if(isDebug) {
         //draw framerate
         ofSetColor(255);
-        string msg = "FPS: " + ofToString(ofGetFrameRate(), 2);
+        
 #ifdef KORG_ENABLED
         // Show/hide Korg gui
         nano.showGui(KorgDebug);
 #endif
+        int posYDebug = 20;
+        int posXDebug = 10;
         
-        ofDrawBitmapString(msg, 10, 20);
+        string msg = "FPS: " + ofToString(ofGetFrameRate(), 2);
+        ofDrawBitmapString(msg, posXDebug, posYDebug);
+        
+        // Draw video file names
+        if(dirVid.size() > 0) {
+            ofColor bg(0,160);
+            ofColor fg(255);
+            
+            ofDrawBitmapStringHighlight(ofToString(dirVid.size()) + " videos loaded",posXDebug, (posYDebug + 22), bg, fg);
+            
+            for(int i = 0; i < (int)dirVid.size(); i++){
+                string fileInfo = "Video file " + ofToString(i + 1) + " = " + dirVid.getName(i);
+                
+                if(i == idVid) {
+                    fg = ofColor(255,0,0);
+                }    else {
+                    fg = ofColor(255);
+                }
+                
+                ofDrawBitmapStringHighlight(fileInfo, posXDebug, (posYDebug + 22*2) + (i * 21), bg, fg);
+            }
+        }
+        
         
         gui.setPosition(ofGetWidth() - 310,10);
         gui.draw();
+        
+        
     }
 }
 
@@ -469,37 +477,6 @@ void testApp::draw(){
 //--------------------------------------------------------------
 // AUDIO BUFFER FROM LOADED FILE EVENT HANDLER
 //--------------------------------------------------------------
-void testApp::audioIn(float * input, int bufferSize, int nChannels){
-    
-    float curVol = 0.0;
-    
-    // samples are "interleaved"
-    int numCounted = 0;
-    
-    //lets go through each sample and calculate the root mean square which is a rough way to calculate volume
-    for (int i = 0; i < bufferSize; i++){
-        left[i]		= input[i*2]*0.5;
-        right[i]	= input[i*2+1]*0.5;
-        
-        curVol += left[i] * left[i];
-        curVol += right[i] * right[i];
-        numCounted+=2;
-    }
-    
-    //this is how we get the mean of rms :)
-    curVol /= (float)numCounted;
-    
-    // this is how we get the root of rms :)
-    curVol = sqrt( curVol );
-    
-    smoothedVol *= 0.93;
-    smoothedVol += 0.07 * curVol;
-    
-    bufferCounter++;
-    
-    
-    
-}
 
 
 //--------------------------------------------------------------
@@ -517,24 +494,31 @@ void testApp::keyPressed(int key){
     }
     
     
-    
     if(key==' ') {
-        if(isFPSCamEnabled) {
-            camera.setPosition(0, 0, 0);
-            camera.target(ofVec3f(1,0,0));
-        }
-        
-        if(vidPlayer.isPaused()) {
+        if(vidPlayer[idVid].isPaused()) {
             if(isSoundEnabled) {
                 mp3.setPaused(false);
             }
-            vidPlayer.setPaused(false);
+            vidPlayer[idVid].setPaused(false);
         }else{
             if(isSoundEnabled) {
                 mp3.setPaused(true);
             }
-            vidPlayer.setPaused(true);
+            vidPlayer[idVid].setPaused(true);
         }
+    }
+    
+    if (dirVid.size() > 0){
+        if(key == OF_KEY_DOWN) {
+            idVid++;
+        }else if(key == OF_KEY_UP) {
+            idVid--;
+            if(idVid < 0)
+                idVid = dirVid.size() - 1;
+        }
+        mesh.clear();
+        
+        idVid %= dirVid.size();
     }
     
     if( key == 'p') {
@@ -589,12 +573,6 @@ void testApp::keyPressed(int key){
     if(key == 'm'){
         saveCam.tweenNow(5, 3);
     }
-    
-    
-    if(key == 'b'){
-        saveCam.cutNow((int)ofRandom(2));
-    }
-    
 }
 
 //--------------------------------------------------------------
@@ -656,6 +634,7 @@ void testApp::korgPotChanged(int &_val) {
 
 void testApp::korgSliderChanged(int &_val) {
     zMult = float(ofMap(nano.getVal(K_SLIDER_4),0,127,0.01,4.0));
+    pLineThickness = int(ofMap(nano.getVal(K_SLIDER_3),0,127,2,12));
 }
 
 
@@ -670,78 +649,6 @@ void testApp::sceneButtonPressed(int &e) {
 //--------------------------------------------------------------
 void testApp::setupCameraSaveLoad() {
     saveCam.setup(&cam,"xml"); // add you ofeasycam and the folder where the xmls are
-    saveCam.enableSave(); // by defaul the listion is on you can actival with enableSave;
-    //saveCam.disableSave(); // or disable key save wtih this
-}
-
-//--------------------------------------------------------------
-// FPS GAME CAMERA SETUP
-//--------------------------------------------------------------
-void testApp::setupFPSCam() {
-    // FPS CAMERA
-    camera.setup();
-    /*****************************************************
-     // ofxFPSCamera example
-     
-     // by Ivaylo Getov, 2014
-     // Derived from ofxGameCamera, created by James George and FlightPhase
-     
-     // Methods: ////////////////////////
-     
-     camera.disableMove()                                // Disables both mouse and keyboard control
-     camera.enableMove()                                 // Enables both mouse and keyboard control
-     
-     camera.disableStrafe()                              // Disables left/right strafe (A/D or left/right arrow)
-     camera.enableStrafe()                               // Enables left/right strafe (on by default)
-     
-     camera.setCamHeight(float ch);                      // Sets camera y-height
-     
-     camera.target(ofVec3f v);                           // Sets look target as a vector from current camera position
-     camera.getTarget();                                 // Returns current target as an ofVec3f
-     
-     camera.getPosition();                               // Returns ofVec3f of (X,Y,Z) position
-     camera.setPosition(float px, float py, float pz);   // Sets camera position to (x,y,z)
-     camera.setPosition(const ofVec3f &p);               // Sets camera position to ofVec3f
-     camera.movedManually();                             // Call this whenever you update orientation or position manually (eg using camera.setPosition())
-     
-     camera.setMinMaxY(float angleDown, float angleUp);  // Set new limits for looking down and up
-     
-     camera.reset();                                     // Sets camera position to (0,0,0) and camHeight = 0.0
-     camera.reset(float h);                              // Sets camera position to (0,0,0) and camHeight = h
-     camera.reset(float x, float y, float z);            // Sets camera position to (x,y,z) and camHeight = 0.0
-     camera.reset(float x, float y, float z, float h);   // Sets camera position to (x,y,z) and camHeight = h
-     camera.reset(ofVec3f v);                            // Sets camera position to ofVec3f v and camHeight = 0.0
-     camera.reset(ofVec3f v, float h);                   // Sets camera position to ofVec3f v and camHeight = h
-     
-     
-     // Defaults: ///////////////////////
-     
-     camera.sensitivityX = 0.10f;            // Mouse Sensitivity
-     camera.sensitivityY = 0.10f;
-     
-     
-     
-     
-     camera.usemouse = true;
-     camera.useArrowKeys = false;            // arrow keys instead of W A S D
-     camera.autosavePosition = false;
-     
-     camera.camHeight = 0.0;                 // Camera will always move along a horizontal plane at this Y-value
-     camera.upAngle = -30.0;                 // must be negative - limits angle looking UP
-     camera.downAngle = 30.0;                // must be positive - limits angle looking DOWN
-     
-     camera.keepTurning = false;             // When mouse is at far left or right of screen, setting this to TRUE will
-     // keep the camera rotating in that direction. The default setting of FALSE will
-     // allow for an "infinite" mouse, repositioning the mouse to the middle when it reaches
-     // the edge. This is tested on a Mac and SHOUD work on windows, but I haven't had
-     // a chance to test it. Currently does not worl on Linux.
-     
-     camera.easeIn = true;                   // Camera movements speed up gradually until they reach value set as camera.speed.
-     camera.accel = 0.3;                     // if easeIn is set to TRUE, this is the rate of acceleration.
-     
-     *****************************************************/
-    camera.speed = 28.0f;                    // Movement speed
-    camera.target(ofVec3f(0,0,1));
-    
-    isFPSCamEnabled = true;
+    //saveCam.enableSave(); // by defaul the listion is on you can actival with enableSave;
+    saveCam.disableSave(); // or disable key save wtih this
 }
