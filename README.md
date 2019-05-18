@@ -28,7 +28,7 @@ The code is still a little bit dirty and undocumented. Basically, the app has th
 ------------
 ## Dependecies
 - ofxCameraMove
-- ofxFPSCamera
+- ofxFFT
 - ofxGui
 - ofxKorgNanoKontrol
 - ofxMidi
@@ -44,5 +44,5 @@ The code is still a little bit dirty and undocumented. Basically, the app has th
   - Execute main alogrithm in the GPU via shaders. Any suggestion or help are highly apprecieted.
   - Improve user interaction. Camera movement can be adapted to ofxTimeline.
   - Finish documentation. 
-  - Enable sound reactive mode for loaded sound samples or/and microphone input data  
+  - <s>Enable sound reactive mode for loaded sound samples or/and microphone input data</s>
   - Create Enum structure for mode selection.
