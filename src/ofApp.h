@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ofMain.h"
+#include "ofxToolkit.h"
 // Uncomment the foloowing line to enbale midi - Input
 //#define KORG_ENABLED
 
@@ -14,12 +15,15 @@
 #include "ofxMotionBlurCamera.h"
 #include "ofxProcessFFT.h"
 
-class testApp : public ofBaseApp{
+class ofApp : public ofBaseApp{
 public:
+    
+    enum MODES{VIDEO=1, CAM, IMAGE};
     
     void setup();
     void update();
     void draw();
+    void exit();
     
     void keyPressed(int key);
     void keyReleased(int key);
@@ -33,7 +37,14 @@ public:
     
     // CUSTOM METHODS
     void setupCameraSaveLoad();
-    void setupVideos();
+    void setupVideos(string _folder);
+    void setupImages(string _folder);
+    
+    // SETTERS & GETTERS
+    float getMappedFreqResponse(int _f, int _inMin, int _inMax, int _outMin, int _outMax);
+    
+    // FRAME BOX
+    void drawFrameBox(int _x, int _y, int _z, int _w, int _h, int _d);
     
     // GUI
     ofxPanel gui;
@@ -59,6 +70,7 @@ public:
     
     // Sound Player Parameters
     ofParameterGroup soundGUI;
+    ofParameter<bool> isSoundReactive;
     ofParameter<bool> isSoundEnabled;
     ofParameter<float> soundLevel;
     
@@ -88,6 +100,8 @@ public:
     void korgPotChanged(int & _val);
     void sceneButtonPressed(int & _val);
 #endif
+    // OFX TOOLKIT
+    ofxToolKit tools;
     
     // FX
     ofxPostGlitch fx;
@@ -96,6 +110,9 @@ public:
     
     // Video Player
     vector<ofVideoPlayer> vidPlayer;
+    
+    // Still Image
+    vector<ofImage> images;
     ofPixels vidPlayerPx;
     
     // Video Grabber
@@ -103,8 +120,8 @@ public:
     int 				camWidth;
     int 				camHeight;
     
-    // Still Image
-    ofImage img;
+    
+
     
     // Main Scene Mesh
     ofMesh mesh;
@@ -141,7 +158,7 @@ public:
     float velocity;
     float size;
     
-    string mode;
+    int mode;
     string dirVidStr;
     
     // Global Light Options
@@ -151,7 +168,7 @@ public:
     ofEasyCam cam;
 
     bool isDebug;
-    
+    bool isSaveEnabled;
     
     
     // Sound Player Analysis Parameters
@@ -159,5 +176,7 @@ public:
     ofSoundPlayer 		mp3;
     
     float prevx, prevy;
+    
+    string folderPath;
 
 };

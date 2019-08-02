@@ -1,4 +1,4 @@
-#include "testApp.h"
+#include "ofApp.h"
 
 
 // things to do
@@ -7,17 +7,22 @@
 // fast video switch?
 
 //--------------------------------------------------------------
-void testApp::setup(){
+void ofApp::setup(){
+    //ofEnableSmoothing();
+    //ofEnableSetupScreen();
     ofSetVerticalSync(true);
     // toggle fullscreen
    // ofToggleFullscreen();
-    
-    // Hide mouse cursor by default
-    ofHideCursor();
-    
    
     // Enable or Disable Debug Mode
-    isDebug = false;
+    isDebug = true;
+    
+    // TOOLKIT
+    isSaveEnabled = false;
+    
+    // Hide mouse cursor, if "isDebug" enabled
+    if(!isDebug)
+        ofHideCursor();
     
     // Enable or Disable Mesh Gray scale
     isWhiteColor    = false;
@@ -26,8 +31,8 @@ void testApp::setup(){
     isPointMode     = false;
     
     // Switch input source mode
-    mode = "video";
-    
+    mode = VIDEO;
+    folderPath = "videos";
     
     // GUI OPTIONS
     ofxGuiSetFont( "../../../../../../assets/DIN.otf", 8 );
@@ -50,6 +55,7 @@ void testApp::setup(){
     gui.add(isPointMode.set("Mode: POINT",false));
     
     // SOUND GUI
+    soundGUI.add(isSoundReactive.set("Sound Reactive Mode", true));
     soundGUI.setName("Sound Player");
     soundGUI.add(isSoundEnabled.set("Load Sound", false));
     soundGUI.add(soundLevel.set("Volume", 0.5, 0.0, 1.0));
@@ -88,10 +94,10 @@ void testApp::setup(){
     nano.getListMidiDevices();
     nano.setup(true);
     
-    ofAddListener(nano.sceneButtonPressed, this, &testApp::sceneButtonPressed);
-    ofAddListener(nano.sliderValChanged, this, &testApp::korgSliderChanged);
-    ofAddListener(nano.pushButtonPressed, this, &testApp::korgButtonPressed);
-    ofAddListener(nano.potValChanged, this, &testApp::korgPotChanged);
+    ofAddListener(nano.sceneButtonPressed, this, &ofApp::sceneButtonPressed);
+    ofAddListener(nano.sliderValChanged, this, &ofApp::korgSliderChanged);
+    ofAddListener(nano.pushButtonPressed, this, &ofApp::korgButtonPressed);
+    ofAddListener(nano.potValChanged, this, &ofApp::korgPotChanged);
 #endif
     
     // GUI group to minimize or maximize
@@ -99,11 +105,11 @@ void testApp::setup(){
     gui.getGroup("FX Types").minimize();
     
     // Initialize image
-    if(mode == "image")
-        img.load("afx.png");
+    if(mode == IMAGE)
+        setupImages(folderPath);
     
     // Initialize video grabber
-    if(mode == "cam") {
+    if(mode == CAM) {
         camWidth         =  320;    // try to grab at this size.
         camHeight        =  240;
         vidGrabber.initGrabber(camWidth,camHeight);
@@ -111,8 +117,8 @@ void testApp::setup(){
     
     
     // VIDEO::Initialize Video Player
-    if(mode == "video") {
-        setupVideos();
+    if(mode == VIDEO) {
+        setupVideos(folderPath+"/");
     }
     
     
@@ -130,7 +136,7 @@ void testApp::setup(){
     
     
     // Create fbo to apply shader FX effects
-    fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,4);
+    fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,2);
     fx.setup(&fbo);
    
     // Default parameter values
@@ -139,11 +145,41 @@ void testApp::setup(){
   
     // SETUP CAMERA SAVE & LOAD to load selected camera properties
     setupCameraSaveLoad();
+    
+    
+    // SETUP TOOLKITS
+    tools.setupRecord(1,"export");
+    
+
 }
 
-void testApp::setupVideos()
+void ofApp::setupImages(string _folder) {
+    images.clear();
+    dirVidStr = _folder;
+    //dirVidStr = "ISP_haydarpasa";
+    dirVid.listDir(dirVidStr);
+    dirVid.sort(); // in linux the file system doesn't return file lists ordered in alphabetical order
+    
+    //allocate the vector to have as many ofImages as files
+    if( dirVid.size() ){
+        images.assign(dirVid.size(), ofImage());
+    }
+    
+    // you can now iterate through the files and load them into the ofImage vector
+    for(int i = 0; i < (int)dirVid.size(); i++){
+        images[i].load(dirVid.getPath(i));
+    }
+    idVid = 0;
+    
+    // Default video parameters to set pivot point to center
+    curTransX = -images[idVid].getWidth()*0.5;
+    curTransY = -images[idVid].getHeight()*0.5;
+}
+
+void ofApp::setupVideos(string _str)
 {
-    dirVidStr = "ISP-Salt_video_footage";
+    vidPlayer.clear();
+    dirVidStr = _str;
     //dirVidStr = "ISP_haydarpasa";
     dirVid.listDir(dirVidStr + "/");
     dirVid.sort(); // in linux the file system doesn't return file lists ordered in alphabetical order
@@ -168,9 +204,10 @@ void testApp::setupVideos()
 //--------------------------------------------------------------
 // UPDATE : MAIN
 //--------------------------------------------------------------
-void testApp::update(){
+void ofApp::update(){
     // Update FFT sound input analyze
-    fft.update();
+    if(isSoundReactive)
+        fft.update();
     
     // Sound Player
     if(isSoundEnabled) {
@@ -204,7 +241,7 @@ void testApp::update(){
     // Update Method for shader effects
     updateFXParameters();
     
-    if(mode == "grabber") {
+    if(mode == CAM) {
         //vidGrabber.update();
     }
     
@@ -220,7 +257,7 @@ void testApp::update(){
         mesh.setMode(OF_PRIMITIVE_LINES);
     }
     
-    if(mode == "video") {
+    if(mode == VIDEO) {
         if(dirVid.size() > 0) {
             vidPlayer[idVid].update();
             vidPlayerPx = vidPlayer[idVid].getPixels();
@@ -234,16 +271,21 @@ void testApp::update(){
                     
                     if(!isWhiteColor) {
                         meshColor = vidPlayerPx.getColor(x, y);
-                        mesh.addColor(ofColor(meshColor, 255));
+                        mesh.addColor(ofColor(meshColor, 255)); // meshColor.getBrightness()
                     }else{
                         meshColor = vidPlayerPx.getColor(x, y).getBrightness();
                         mesh.addColor(ofColor(meshColor, 255));
                     }
                     
-                    float fftDepth = ofMap(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
+                    // Get mapped Frequency Response
+                    float fftDepth = getMappedFreqResponse(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
+                    
+
+                   
                     //cout << fft.getIntensityAtFrequency(fftDepth) << endl;
                     mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getIntensityAtFrequency(fftDepth) * soundThresMult)));
                     //curColor.getBrightness() * .3 + scaledVol));
+ 
                     
                     if(x == 0) {
                         mesh.addIndex(xy);
@@ -267,17 +309,19 @@ void testApp::update(){
     
     
     
-    
+    // Process stroke size
+    ofSetLineWidth(pLineThickness);
+    glPointSize(pLineThickness);
     int xy=0;
-    if(mode == "image"  ) {
-        vidPlayerPx = img.getPixels();
-        for (int y = 0; y<img.getHeight(); y+=yStep){
+    if(mode == IMAGE  ) {
+        vidPlayerPx = images[idVid].getPixels();
+        for (int y = 0; y < images[idVid].getHeight(); y+=yStep){
             ofNoFill();
             
             
-            for (int x = 0; x < img.getWidth(); x += xStep){
+            for (int x = 0; x < images[idVid].getWidth(); x += xStep){
                 
-                meshColor = img.getColor(x, y);
+                meshColor = images[idVid].getColor(x, y);
 
                 
                 if(!isWhiteColor) {
@@ -288,19 +332,27 @@ void testApp::update(){
                     mesh.addColor(ofColor(meshColor, 255));
                 }
                 
-                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getMidVal())));
+                // Get mapped Frequency Response
+                float fftDepth = getMappedFreqResponse(xy, 0, images[idVid].getHeight() * images[idVid].getWidth(), 100, 15000);
+                
+               
+                
+                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getIntensityAtFrequency(fftDepth) * soundThresMult)));
 
                 
-                if(x == 0 || x == img.getWidth()-1) {
+                if(x == 0) {
                     mesh.addIndex(xy);
                 }
                 
-                if(x != 0 && x != img.getWidth()-1) {
+                if(x != 0 && x != images[idVid].getWidth()-xStep) {
                     mesh.addIndex(xy);
                     mesh.addIndex(xy);
                 }
                 
-                xy++;
+                if(x >= images[idVid].getWidth()-xStep) {
+                    mesh.addIndex(xy);
+                }
+                xy = xy + 1;
                 
             }
         }
@@ -311,7 +363,7 @@ void testApp::update(){
 //--------------------------------------------------------------
 // UPDATE : FX SHADER
 //--------------------------------------------------------------
-void testApp::updateFXParameters() {
+void ofApp::updateFXParameters() {
     // FX
     if(fx.getFx(OFXPOSTGLITCH_GLOW))
         fx.setGlowAmount(glowAmount);
@@ -349,9 +401,14 @@ void testApp::updateFXParameters() {
 //--------------------------------------------------------------
 // DRAW METHOD
 //--------------------------------------------------------------
-void testApp::draw(){
+void ofApp::draw(){
     
     //cam.setPosition(camPos.x, camPos.y, camPos.z);
+    
+    // BEGIN RECORD
+    if(isSaveEnabled) {
+        tools.beginRecord();
+    }
     
     // light.enable();
     ofBackground(0);
@@ -362,65 +419,56 @@ void testApp::draw(){
     
     //ofTranslate(0, ofGetHeight()*0.5);
     cam.begin();
-    ofClear(0,0,0,0);
+    ofClear(0,0);
     
     glEnable(GL_DEPTH_TEST);
     
-    //uncomment for video grabber
-    if(mode == "cam") {
+    ofPushMatrix();
+    
+    int depth = 255*zMult;
+    
+    // MODE: CAM
+    if(mode == CAM) {
         ofTranslate(-vidGrabber.getWidth() * 0.5, -vidGrabber.getHeight() * 0.5);
     }
     
     //translate based on size of video
     int xp,yp;
-    if( mode == "image") {
-        xp = -img.getWidth()*0.5 - 22;
-        yp = -img.getHeight()*0.5;
-        ofTranslate(xp, yp);//
+    if( mode == IMAGE) {
+        // Draw Frame Box
+        drawFrameBox(curTransX + images[idVid].getWidth() * 0.5, curTransY + images[idVid].getHeight() * 0.5, curTransZ , images[idVid].getWidth(), images[idVid].getHeight(), depth);
+        
+        ofScale(1, -1, 1);
+        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
     }
     
-    int depth = 255*zMult;
-    ofPushMatrix();
-    if(mode == "video") {
-        //ofTranslate(contTrans);
-        if(isShowFrame) {
-            ofPushStyle();
-            ofNoFill();
-            ofSetColor(200,0,0);
-            //ofDrawRectangle(curTransX, curTransY, curTransZ, vidPlayer.getWidth(),vidPlayer.getHeight());
-            
-            ofDrawBox(curTransX + vidPlayer[idVid].getWidth() * 0.5, curTransY + vidPlayer[idVid].getHeight() * 0.5, curTransZ , vidPlayer[idVid].getWidth(), vidPlayer[idVid].getHeight(), depth);
-            ofPopStyle();
-        }
+    
+    
+    if(mode == VIDEO) {
+        // Draw Frame Box
+        drawFrameBox(curTransX + vidPlayer[idVid].getWidth() * 0.5, curTransY + vidPlayer[idVid].getHeight() * 0.5, curTransZ , vidPlayer[idVid].getWidth(), vidPlayer[idVid].getHeight(), depth);
         
         // if easycam y=-1
         ofScale(1, -1, 1);
-        //ofRotateX(ofMap(mouseY,0, ofGetHeight(),-180,180));
         
-        //ofTranslate(contTransX, contTransY, contTransZ);
-        
-        //ofLog() << "cam position: " << cam.getPosition();
         ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
-        
-        
     }
     
     
     // DRAW MESH
     ofPushStyle();
     ofNoFill();
-    ofSetLineWidth(pLineThickness);
-    glPointSize(pLineThickness);
+    
     mesh.draw();
     ofPopStyle();
     ofPopMatrix();
     
     glDisable(GL_DEPTH_TEST);
-    
 
     cam.end();
     
     fbo.end();
+    
     
     // Generate and apply shader effects
     fx.generateFx();
@@ -428,7 +476,10 @@ void testApp::draw(){
     // DRAW GENERATED FBO TO SCREEN
     fbo.draw(0,0);
     
-    
+    if(isSaveEnabled) {
+        tools.endRecord();
+        isSaveEnabled = false;
+    }
     // GUI
     if(isDebug) {
         //draw framerate
@@ -449,10 +500,10 @@ void testApp::draw(){
             ofColor bg(0,160);
             ofColor fg(255);
             
-            ofDrawBitmapStringHighlight(ofToString(dirVid.size()) + " videos loaded",posXDebug, (posYDebug + 22), bg, fg);
+            ofDrawBitmapStringHighlight(ofToString(dirVid.size()) + " files loaded",posXDebug, (posYDebug + 22), bg, fg);
             
             for(int i = 0; i < (int)dirVid.size(); i++){
-                string fileInfo = "Video file " + ofToString(i + 1) + " = " + dirVid.getName(i);
+                string fileInfo = "File " + ofToString(i + 1) + " = " + dirVid.getName(i);
                 
                 if(i == idVid) {
                     fg = ofColor(255,0,0);
@@ -472,7 +523,20 @@ void testApp::draw(){
     }
 }
 
+void ofApp::drawFrameBox(int _x, int _y, int _z, int _w, int _h, int _d) {
+    if(isShowFrame) {
+        ofPushStyle();
+        ofNoFill();
+        ofSetColor(200,0,0);
+        
+        ofDrawBox(_x, _y, _z, _w, _h, _d);
+        ofPopStyle();
+    }
+}
 
+float ofApp::getMappedFreqResponse(int _f, int _inMin, int _inMax, int _outMin, int _outMax) {
+    return (isSoundReactive) ? ofMap(_f, _inMin, _inMax, _outMin, _outMax) : 0;
+}
 
 //--------------------------------------------------------------
 // AUDIO BUFFER FROM LOADED FILE EVENT HANDLER
@@ -480,7 +544,7 @@ void testApp::draw(){
 
 
 //--------------------------------------------------------------
-void testApp::keyPressed(int key){
+void ofApp::keyPressed(int key){
     
     if(key=='y'){
         if(yStep<150)
@@ -543,6 +607,10 @@ void testApp::keyPressed(int key){
             zMult = 0.05;
     }
     
+    if(key == 's'){
+        isSaveEnabled = true;
+    }
+    
     if(key == 'd') {
         isDebug = !isDebug;
         if(!isDebug)
@@ -554,66 +622,74 @@ void testApp::keyPressed(int key){
     if(key == 'f')
         ofToggleFullscreen();
     
-    if(key == 'x'){
+    if(key == 'z'){
         saveCam.tweenNow(0, 3); // first int is what camera to tween to , secound int is time
     }
-    if(key == 'c'){
+    if(key == 'x'){
         saveCam.tweenNow(1, 2.5);
     }
-    if(key == 'v'){
+    if(key == 'c'){
         saveCam.tweenNow(2, 3.5);
     }
     
-    if(key == 'b'){
+    if(key == 'v'){
         saveCam.tweenNow(3, 3); // first int is what camera to tween to , secound int is time
     }
-    if(key == 'n'){
+    if(key == 'b'){
         saveCam.tweenNow(4, 3);
     }
-    if(key == 'm'){
+    if(key == 'n'){
         saveCam.tweenNow(5, 3);
     }
 }
 
 //--------------------------------------------------------------
-void testApp::keyReleased(int key){
+void ofApp::keyReleased(int key){
     
 }
 
 //--------------------------------------------------------------
-void testApp::mouseMoved(int x, int y){
+void ofApp::mouseMoved(int x, int y){
     
 }
 
 //--------------------------------------------------------------
-void testApp::mouseDragged(int x, int y, int button){
+void ofApp::mouseDragged(int x, int y, int button){
     
 }
 
 //--------------------------------------------------------------
-void testApp::mousePressed(int x, int y, int button){
+void ofApp::mousePressed(int x, int y, int button){
     
 }
 
 //--------------------------------------------------------------
-void testApp::mouseReleased(int x, int y, int button){
+void ofApp::mouseReleased(int x, int y, int button){
     
 }
 
 //--------------------------------------------------------------
-void testApp::windowResized(int w, int h){
+void ofApp::windowResized(int w, int h){
     fbo.clear();
-    fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,4);
+    
+    ofFbo::Settings settings;
+    settings.useStencil = true;
+    settings.height = ofGetWidth();
+    settings.width = ofGetHeight();
+    settings.internalformat = GL_RGBA;
+    settings.numSamples = 2;
+    
+    fbo.allocate(settings);
     fx.setFbo(&fbo);
 }
 
 //--------------------------------------------------------------
-void testApp::gotMessage(ofMessage msg){
+void ofApp::gotMessage(ofMessage msg){
     
 }
 
 //--------------------------------------------------------------
-void testApp::dragEvent(ofDragInfo dragInfo){ 
+void ofApp::dragEvent(ofDragInfo dragInfo){
     
 }
 
@@ -621,24 +697,24 @@ void testApp::dragEvent(ofDragInfo dragInfo){
 // KORG NANO CONTROLLER LISTENER METHODS
 //--------------------------------------------------------------
 #ifdef KORG_ENABLED
-void testApp::korgButtonPressed(int &_val) {
+void ofApp::korgButtonPressed(int &_val) {
     
 }
 
 
-void testApp::korgPotChanged(int &_val) {
+void ofApp::korgPotChanged(int &_val) {
     
     
 }
 
 
-void testApp::korgSliderChanged(int &_val) {
+void ofApp::korgSliderChanged(int &_val) {
     zMult = float(ofMap(nano.getVal(K_SLIDER_4),0,127,0.01,4.0));
     pLineThickness = int(ofMap(nano.getVal(K_SLIDER_3),0,127,2,12));
 }
 
 
-void testApp::sceneButtonPressed(int &e) {
+void ofApp::sceneButtonPressed(int &e) {
     cout <<  "Scene button pressed" << endl;
 }
 #endif
@@ -647,8 +723,16 @@ void testApp::sceneButtonPressed(int &e) {
 //--------------------------------------------------------------
 // CAMERA SAVE & LOAD
 //--------------------------------------------------------------
-void testApp::setupCameraSaveLoad() {
+void ofApp::setupCameraSaveLoad() {
     saveCam.setup(&cam,"xml"); // add you ofeasycam and the folder where the xmls are
     //saveCam.enableSave(); // by defaul the listion is on you can actival with enableSave;
     saveCam.disableSave(); // or disable key save wtih this
 }
+
+void ofApp::exit() {
+    for(int i = 0; i < (int)dirVid.size(); i++){
+        
+        vidPlayer[i].close();
+    }
+}
+
