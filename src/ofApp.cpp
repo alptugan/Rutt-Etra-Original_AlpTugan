@@ -8,7 +8,7 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-    //ofEnableSmoothing();
+    ofEnableSmoothing();
     //ofEnableSetupScreen();
     ofSetVerticalSync(true);
     // toggle fullscreen
@@ -136,7 +136,11 @@ void ofApp::setup(){
     
     
     // Create fbo to apply shader FX effects
-    fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,2);
+    fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,4);
+    fbo.begin();
+    ofClear(0,0);
+    fbo.end();
+    
     fx.setup(&fbo);
    
     // Default parameter values
@@ -144,13 +148,11 @@ void ofApp::setup(){
     
   
     // SETUP CAMERA SAVE & LOAD to load selected camera properties
-    setupCameraSaveLoad();
+   // setupCameraSaveLoad();
     
     
     // SETUP TOOLKITS
     tools.setupRecord(1,"export");
-    
-
 }
 
 void ofApp::setupImages(string _folder) {
@@ -172,8 +174,7 @@ void ofApp::setupImages(string _folder) {
     idVid = 0;
     
     // Default video parameters to set pivot point to center
-    curTransX = -images[idVid].getWidth()*0.5;
-    curTransY = -images[idVid].getHeight()*0.5;
+    setTranslationPoints();
 }
 
 void ofApp::setupVideos(string _str)
@@ -197,10 +198,22 @@ void ofApp::setupVideos(string _str)
     idVid = 0;
     
     // Default video parameters to set pivot point to center
-    curTransX = -vidPlayer[idVid].getWidth()*0.5;
-    curTransY = -vidPlayer[idVid].getHeight()*0.5;
+    setTranslationPoints();
 }
 
+void ofApp::setTranslationPoints() {
+    if(mode == VIDEO) {
+        curTransX = -vidPlayer[idVid].getWidth()*0.5;
+        curTransY = -vidPlayer[idVid].getHeight()*0.5;
+    }else if( mode == IMAGE) {
+        curTransX = -images[idVid].getWidth()*0.5;
+        curTransY = -images[idVid].getHeight()*0.5;
+    }else if( mode == CAM) {
+        
+    }
+    
+    ofLog() << "curTransX : " << curTransX;
+}
 //--------------------------------------------------------------
 // UPDATE : MAIN
 //--------------------------------------------------------------
@@ -414,14 +427,13 @@ void ofApp::draw(){
     ofBackground(0);
     
     
-    
+    glEnable(GL_DEPTH_TEST);
     fbo.begin();
-    
+    ofClear(0,0);
     //ofTranslate(0, ofGetHeight()*0.5);
     cam.begin();
-    ofClear(0,0);
     
-    glEnable(GL_DEPTH_TEST);
+    
     
     ofPushMatrix();
     
@@ -463,7 +475,7 @@ void ofApp::draw(){
     ofPopStyle();
     ofPopMatrix();
     
-    glDisable(GL_DEPTH_TEST);
+    
 
     cam.end();
     
@@ -475,6 +487,8 @@ void ofApp::draw(){
     
     // DRAW GENERATED FBO TO SCREEN
     fbo.draw(0,0);
+    
+    glDisable(GL_DEPTH_TEST);
     
     if(isSaveEnabled) {
         tools.endRecord();
@@ -672,15 +686,24 @@ void ofApp::mouseReleased(int x, int y, int button){
 void ofApp::windowResized(int w, int h){
     fbo.clear();
     
+    //setTranslationPoints();
+
     ofFbo::Settings settings;
-    settings.useStencil = true;
-    settings.height = ofGetWidth();
-    settings.width = ofGetHeight();
-    settings.internalformat = GL_RGBA;
-    settings.numSamples = 2;
+    settings.useStencil = false;
+    settings.maxFilter = GL_NEAREST;
+    settings.minFilter = GL_NEAREST;
+    settings.height = h;
+    settings.width = w;
+    settings.internalformat = GL_RGBA16F;
+    settings.numSamples = 4;
     
     fbo.allocate(settings);
+    fbo.begin();
+    ofClear(0,0);
+    fbo.end();
+    
     fx.setFbo(&fbo);
+    
 }
 
 //--------------------------------------------------------------

@@ -39,6 +39,7 @@ public:
     void setupCameraSaveLoad();
     void setupVideos(string _folder);
     void setupImages(string _folder);
+    void setTranslationPoints();
     
     // SETTERS & GETTERS
     float getMappedFreqResponse(int _f, int _inMin, int _inMax, int _outMin, int _outMax);

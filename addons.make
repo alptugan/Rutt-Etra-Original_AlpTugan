@@ -6,5 +6,6 @@ ofxMidi
 ofxMotionBlurCamera
 ofxOsc
 ofxPostGlitch
+ofxToolKit
 ofxTweener
 ofxXmlSettings
