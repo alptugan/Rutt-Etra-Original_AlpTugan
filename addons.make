@@ -1,11 +1,11 @@
 ofxCameraMove
-ofxFft
+ofxTweener
+ofxFft-Kyle
 ofxGui
 ofxKorgNanoKontrol
 ofxMidi
 ofxMotionBlurCamera
-ofxOsc
 ofxPostGlitch
-ofxToolKit
-ofxTweener
+ofxPostProcessing
 ofxXmlSettings
+ofxPoco

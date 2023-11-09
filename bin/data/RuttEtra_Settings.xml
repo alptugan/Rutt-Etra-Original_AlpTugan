@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<RuttEtra_Options>
+	<Vertical_Vertex_Distance>4</Vertical_Vertex_Distance>
+	<Horizontal_Vertex_Distance>5</Horizontal_Vertex_Distance>
+	<Z-Depth_Vertex>0.466667</Z-Depth_Vertex>
+	<sound_Multiplier_Fac>0.350333</sound_Multiplier_Fac>
+	<Mesh_Line_Thickness>2</Mesh_Line_Thickness>
+	<Show_Mesh_Frame>0</Show_Mesh_Frame>
+	<Set_Color>0</Set_Color>
+	<POINT_Mesh_Mode>0</POINT_Mesh_Mode>
+	<Enable_Video_Sound>0</Enable_Video_Sound>
+	<Sound_Player>
+		<Sound_Reactive_Mode>1</Sound_Reactive_Mode>
+		<Load_External_Sound>1</Load_External_Sound>
+		<Volume>0.5</Volume>
+		<PLAY_PAUSE>0</PLAY_PAUSE>
+		<file_path>sounds/ISP_arkaoda_2.wav</file_path>
+	</Sound_Player>
+	<FX_Types>
+		<Glow_Effect_Amount>1</Glow_Effect_Amount>
+		<Converge>0</Converge>
+		<Glow>0</Glow>
+		<Shaker>0</Shaker>
+		<Cut_Slider>0</Cut_Slider>
+		<Twist>0</Twist>
+		<Outline>0</Outline>
+		<Noise>0</Noise>
+		<Slitscan>0</Slitscan>
+		<Swell>0</Swell>
+		<Invert>0</Invert>
+		<High_Contrast>0</High_Contrast>
+		<Blue_Raise>0</Blue_Raise>
+		<Green_Raise>0</Green_Raise>
+		<Red_Raise>0</Red_Raise>
+		<Blue_Invert>0</Blue_Invert>
+		<Red_Invert>0</Red_Invert>
+		<Green_Invert>0</Green_Invert>
+	</FX_Types>
+	<RuttEtra_Options />
+	<Sound_Reactive_Mode>1</Sound_Reactive_Mode>
+	<POST_GLITCH_FX>0</POST_GLITCH_FX>
+</RuttEtra_Options>

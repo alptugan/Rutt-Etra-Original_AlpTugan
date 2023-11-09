@@ -8,17 +8,18 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-    ofEnableSmoothing();
+    //ofEnableSmoothing();
     //ofEnableSetupScreen();
-    ofSetVerticalSync(true);
+    //ofSetVerticalSync(true);
     // toggle fullscreen
    // ofToggleFullscreen();
-   
+    //ofSetFrameRate(2);
+    ofSetWindowPosition(0,0);
+    ofSetWindowShape(1800,1012);
+
     // Enable or Disable Debug Mode
     isDebug = true;
-    
-    // TOOLKIT
-    isSaveEnabled = false;
+
     
     // Hide mouse cursor, if "isDebug" enabled
     if(!isDebug)
@@ -32,18 +33,19 @@ void ofApp::setup(){
     
     // Switch input source mode
     mode = VIDEO;
-    folderPath = "videos";
-    
+    folderPath = "ISP_haydarpasa";
+    soundFilePath.set("file path", "sounds/ISP_arkaoda_2.wav");
+
     // GUI OPTIONS
-    ofxGuiSetFont( "../../../../../../assets/DIN.otf", 8 );
+    ofxGuiSetFont( "../../../../../../assets/fonts/DIN.otf", 8 );
     ofxGuiSetDefaultWidth( 300 );
     ofxGuiSetFillColor(ofColor(255,204,0,200));
     
     string xmlSettingsPath = "RuttEtra_Settings.xml";
-    gui.setup( "Rutt & Etra Options", xmlSettingsPath );
+    gui.setup( "RuttEtra_Options", xmlSettingsPath );
     gui.setPosition(ofGetWidth() - 310,10);
     
-    
+    gui.add(isPostGlitchEnabled.set("POST GLITCH FX", true));
     gui.add(yStep.set("Vertical Vertex Distance", 5,1,200));
     gui.add(xStep.set("Horizontal Vertex Distance", 2,1,200));
     gui.add(zMult.set("Z-Depth Vertex",0.3,0,4));
@@ -52,12 +54,19 @@ void ofApp::setup(){
     
     gui.add(isShowFrame.set("Show Mesh Frame", true));
     gui.add(isWhiteColor.set("Set Color",false));
-    gui.add(isPointMode.set("Mode: POINT",false));
+    gui.add(isPointMode.set("POINT Mesh Mode",false));
+    gui.add(isVideoSoundEnabled.set("Enable Video Sound", false));
+    gui.add(isSoundReactive.set("Sound Reactive Mode", true));
+
+    isVideoSoundEnabled.addListener(this, &ofApp::setVideoSoundEnabled);
+    soundLevel.addListener(this, &ofApp::setSoundLevel);
+    isSoundPlayPause.addListener(this, &ofApp::setPaused);
     
     // SOUND GUI
-    soundGUI.add(isSoundReactive.set("Sound Reactive Mode", true));
     soundGUI.setName("Sound Player");
-    soundGUI.add(isSoundEnabled.set("Load Sound", false));
+    soundGUI.add(soundFilePath);
+    soundGUI.add(isExtSoundEnabled.set("Load External Sound", false));
+    soundGUI.add(isSoundPlayPause.set("PLAY/PAUSE",false));
     soundGUI.add(soundLevel.set("Volume", 0.5, 0.0, 1.0));
     gui.add(soundGUI);
     
@@ -83,6 +92,8 @@ void ofApp::setup(){
     fxTypes.add(greenInv.set("Green Invert",false));
     gui.add(fxTypes);
     
+    
+    
 #ifdef KORG_ENABLED
     // Korg GUI
     KorgGui.setName("Korg Controller Options");
@@ -99,11 +110,7 @@ void ofApp::setup(){
     ofAddListener(nano.pushButtonPressed, this, &ofApp::korgButtonPressed);
     ofAddListener(nano.potValChanged, this, &ofApp::korgPotChanged);
 #endif
-    
-    // GUI group to minimize or maximize
-    gui.getGroup("Sound Player").minimize();
-    gui.getGroup("FX Types").minimize();
-    
+
     // Initialize image
     if(mode == IMAGE)
         setupImages(folderPath);
@@ -122,19 +129,12 @@ void ofApp::setup(){
     }
     
     
-    // SOUND::Load Sound
-    if(isSoundEnabled)
-    {
-        mp3.load("sounds/ISP_arkaoda_2.wav");
-        mp3.play();
-        mp3.setPaused(true);
-    }
-    
     // SOUND ANALYZE FFT
-    fft.setup();
-    fft.setNumFFTBins(32);
+    //fft.setup();
+    //fft.setNumFFTBins(32);
     
     
+    // POST EEFECT (FX) SECTION
     // Create fbo to apply shader FX effects
     fbo.allocate(ofGetWidth(),ofGetHeight(),GL_RGBA,4);
     fbo.begin();
@@ -142,17 +142,68 @@ void ofApp::setup(){
     fbo.end();
     
     fx.setup(&fbo);
-   
+
+    fxManager.setup(ofGetWidth(),ofGetHeight(),"",10);
+    fxManager.setFlip(false);
+    fxManager.loadSettings();
+    
     // Default parameter values
     defCamPos = cam.getPosition();
     
   
     // SETUP CAMERA SAVE & LOAD to load selected camera properties
-   // setupCameraSaveLoad();
+    setupCameraSaveLoad();
     
+
+    // GUI group to minimize or maximize
+    // LOAD SETUP DEFAULTS
+    //gui.getGroup("Sound Player").minimize();
+    gui.getGroup("FX Types").minimize();
+    gui.loadFromFile(xmlSettingsPath);
+
+
+    // SOUND::Load Sound
+    // When using timeline we don't need external sound.
+    // For live performance you can enable it. OR leave it for
+    if(isExtSoundEnabled)
+    {
+        /*mp3.load(soundFilePath.get());
+        mp3.play();
+        mp3.setPaused(!isSoundPlayPause);*/
+    }
     
     // SETUP TOOLKITS
+#ifdef ENABLE_SAVE
+    isSaveEnabled = false;
     tools.setupRecord(1,"export");
+#endif
+
+    // TIMELINE INIT
+    initTimeline();
+
+
+}
+
+void ofApp::setPaused(bool & val) {
+    //isSoundPlayPause = !val;
+    mp3.setPaused(!isSoundPlayPause);
+}
+
+void ofApp::setVideoSoundEnabled(bool & val) {
+    float vol = 0;
+    if(val) {
+        vol = soundLevel;
+    }else{
+        vol = 0;
+    }
+    for (int i = 0; i < vidPlayer.size(); i++) {
+        vidPlayer[i].setVolume(vol);
+    }
+}
+
+void ofApp::setSoundLevel(float & val) {
+    soundLevel = val;
+    mp3.setVolume(soundLevel);
 }
 
 void ofApp::setupImages(string _folder) {
@@ -182,6 +233,8 @@ void ofApp::setupVideos(string _str)
     vidPlayer.clear();
     dirVidStr = _str;
     //dirVidStr = "ISP_haydarpasa";
+    dirVid.allowExt("mov");
+    dirVid.allowExt("mp4");
     dirVid.listDir(dirVidStr + "/");
     dirVid.sort(); // in linux the file system doesn't return file lists ordered in alphabetical order
     
@@ -193,7 +246,8 @@ void ofApp::setupVideos(string _str)
     // you can now iterate through the files and load them into the ofImage vector
     for(int i = 0; i < (int)dirVid.size(); i++){
         vidPlayer[i].load(dirVid.getPath(i));
-        vidPlayer[i].setVolume(0);
+        bool enabl = isVideoSoundEnabled;
+        setVideoSoundEnabled(enabl);
     }
     idVid = 0;
     
@@ -211,26 +265,27 @@ void ofApp::setTranslationPoints() {
     }else if( mode == CAM) {
         
     }
-    
-    ofLog() << "curTransX : " << curTransX;
 }
+
 //--------------------------------------------------------------
 // UPDATE : MAIN
 //--------------------------------------------------------------
 void ofApp::update(){
     // Update FFT sound input analyze
-    if(isSoundReactive)
-        fft.update();
+    if(isSoundReactive) {
+        //fft.update();
+    }
     
     // Sound Player
-    if(isSoundEnabled) {
-        mp3.setVolume(soundLevel);
+    if(isExtSoundEnabled) {
+        //ofSoundUpdate();
     }
     
     // Clear mesh
     mesh.clear();
     
     ofSetWindowTitle(ofToString(ofGetFrameRate(), 2));
+
     // update camera Move
     saveCam.update();
 #ifdef KORG_ENABLED
@@ -252,14 +307,17 @@ void ofApp::update(){
 #endif
     
     // Update Method for shader effects
-    updateFXParameters();
+    if(isPostGlitchEnabled)
+        updateFXParameters();
+    else
+        fxManager.updateValues();
     
     if(mode == CAM) {
         //vidGrabber.update();
     }
     
     // update the sound playing system:
-    ofSoundUpdate();
+    //ofSoundUpdate();
     
     
     //update pixels for mesh
@@ -291,12 +349,12 @@ void ofApp::update(){
                     }
                     
                     // Get mapped Frequency Response
-                    float fftDepth = getMappedFreqResponse(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
-                    
+                    float fftDepth = 0; //getMappedFreqResponse(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
+                    float fftIntensity = 1;//fft.getIntensityAtFrequency(fftDepth);
 
                    
                     //cout << fft.getIntensityAtFrequency(fftDepth) << endl;
-                    mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getIntensityAtFrequency(fftDepth) * soundThresMult)));
+                    mesh.addVertex(glm::vec3(x, y, meshColor.getBrightness() * (zMult + fftIntensity * soundThresMult)));
                     //curColor.getBrightness() * .3 + scaledVol));
  
                     
@@ -322,9 +380,7 @@ void ofApp::update(){
     
     
     
-    // Process stroke size
-    ofSetLineWidth(pLineThickness);
-    glPointSize(pLineThickness);
+    
     int xy=0;
     if(mode == IMAGE  ) {
         vidPlayerPx = images[idVid].getPixels();
@@ -346,11 +402,13 @@ void ofApp::update(){
                 }
                 
                 // Get mapped Frequency Response
-                float fftDepth = getMappedFreqResponse(xy, 0, images[idVid].getHeight() * images[idVid].getWidth(), 100, 15000);
-                
+                //float fftDepth = getMappedFreqResponse(xy, 0, images[idVid].getHeight() * images[idVid].getWidth(), 100, 15000);
+                float fftDepth = 0; //getMappedFreqResponse(xy, 0, vidPlayer[idVid].getHeight() * vidPlayer[idVid].getWidth(), 100, 15000);
+                float fftIntensity = 1;//fft.getIntensityAtFrequency(fftDepth);
+
                
                 
-                mesh.addVertex(ofVec3f(x, y, meshColor.getBrightness() * (zMult + fft.getIntensityAtFrequency(fftDepth) * soundThresMult)));
+                mesh.addVertex(glm::vec3(x, y, meshColor.getBrightness() * (zMult + fftIntensity * soundThresMult)));
 
                 
                 if(x == 0) {
@@ -372,6 +430,55 @@ void ofApp::update(){
     }
 }
 
+void ofApp::initTimeline() {
+    timeline.setup();
+    if(isExtSoundEnabled) {
+        timeline.addAudioTrack("audio", soundFilePath.get());
+        timeline.setDurationInSeconds(timeline.getAudioTrack("audio")->getDuration());
+    }
+
+    // FX Switches
+    timeline.addSwitches("fx");
+
+    // FX Swtiches 2
+    timeline.addSwitches("fx II");
+
+    // Camera Track
+    cameraTrack = new ofxTLCameraTrack();
+    cameraTrack->setCamera(cam);
+    timeline.addTrack("Camera", cameraTrack);
+    cameraTrack->lockCameraToTrack = true;
+
+    //ofAddListener(timeline.events().bangFired, this, &ofApp::bangFired);
+    ofAddListener(timeline.events().switched, this, &ofApp::switchFired);
+    ofAddListener(timeline.events().switched, this, &ofApp::switchFired2);
+}
+
+void ofApp::bangFired(ofxTLBangEventArgs& args) {
+    cout << "bang fired!" << args.flag << endl;
+}
+
+//--------------------------------------------------------------
+// OFXTIMELINE - Switch between post fx during the playback
+//--------------------------------------------------------------
+void ofApp::switchFired(ofxTLSwitchEventArgs& args) {
+    //cout << "switch fired!" << args.switchName << "::" << args.on << endl;
+    if(ofToInt(args.switchName) != 0)
+        fxManager.setFX(ofToInt(args.switchName), args.on);
+}
+
+void ofApp::switchFired2(ofxTLSwitchEventArgs& args) {
+    //cout << "switch fired!" << args.switchName << "::" << args.on << endl;
+    if(args.switchName == "points") {
+        isPointMode = args.on;
+    }else if(args.switchName == "bw") {
+        isWhiteColor = args.on;
+    }else{
+        if(ofToInt(args.switchName) != 0)
+                fxManager.setFX(ofToInt(args.switchName), args.on);
+    }
+}
+
 
 //--------------------------------------------------------------
 // UPDATE : FX SHADER
@@ -379,7 +486,8 @@ void ofApp::update(){
 void ofApp::updateFXParameters() {
     // FX
     if(fx.getFx(OFXPOSTGLITCH_GLOW))
-        fx.setGlowAmount(glowAmount);
+        fx.setBlurAmt(glowAmount);
+
 #ifdef KORG_ENABLED
     (nano.getVal(K_BUTTON_2,K_TYPE_BUTTON)) ? converge = true : converge = false;
     (nano.getVal(K_BUTTON_4,K_TYPE_BUTTON)) ? cut = true : cut = false;
@@ -419,81 +527,27 @@ void ofApp::draw(){
     //cam.setPosition(camPos.x, camPos.y, camPos.z);
     
     // BEGIN RECORD
+#ifdef ENABLE_SAVE
     if(isSaveEnabled) {
         tools.beginRecord();
     }
-    
+#endif
+
     // light.enable();
     ofBackground(0);
-    
-    
-    glEnable(GL_DEPTH_TEST);
-    fbo.begin();
-    ofClear(0,0);
-    //ofTranslate(0, ofGetHeight()*0.5);
-    cam.begin();
-    
-    
-    
-    ofPushMatrix();
-    
-    int depth = 255*zMult;
-    
-    // MODE: CAM
-    if(mode == CAM) {
-        ofTranslate(-vidGrabber.getWidth() * 0.5, -vidGrabber.getHeight() * 0.5);
-    }
-    
-    //translate based on size of video
-    int xp,yp;
-    if( mode == IMAGE) {
-        // Draw Frame Box
-        drawFrameBox(curTransX + images[idVid].getWidth() * 0.5, curTransY + images[idVid].getHeight() * 0.5, curTransZ , images[idVid].getWidth(), images[idVid].getHeight(), depth);
-        
-        ofScale(1, -1, 1);
-        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
-    }
-    
-    
-    
-    if(mode == VIDEO) {
-        // Draw Frame Box
-        drawFrameBox(curTransX + vidPlayer[idVid].getWidth() * 0.5, curTransY + vidPlayer[idVid].getHeight() * 0.5, curTransZ , vidPlayer[idVid].getWidth(), vidPlayer[idVid].getHeight(), depth);
-        
-        // if easycam y=-1
-        ofScale(1, -1, 1);
-        
-        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
-    }
-    
-    
-    // DRAW MESH
-    ofPushStyle();
-    ofNoFill();
-    
-    mesh.draw();
-    ofPopStyle();
-    ofPopMatrix();
-    
-    
 
-    cam.end();
-    
-    fbo.end();
-    
-    
-    // Generate and apply shader effects
-    fx.generateFx();
-    
-    // DRAW GENERATED FBO TO SCREEN
-    fbo.draw(0,0);
-    
-    glDisable(GL_DEPTH_TEST);
-    
+    if(isPostGlitchEnabled)
+        processPostGlitch();
+    else
+        processPostProcessing();
+
+#ifdef ENABLE_SAVE
     if(isSaveEnabled) {
         tools.endRecord();
         isSaveEnabled = false;
     }
+#endif
+
     // GUI
     if(isDebug) {
         //draw framerate
@@ -533,8 +587,64 @@ void ofApp::draw(){
         gui.setPosition(ofGetWidth() - 310,10);
         gui.draw();
         
-        
+        // DRAW FX
+        fxManager.drawGui(gui.getPosition().x - fxManager.getGUIWidth() + 1, gui.getPosition().y);
     }
+
+    // FADEOUT SCREEN
+    // todo: Fade out time to GUI
+    if(isExtSoundEnabled) {
+        float diff = timeline.getAudioTrack("audio")->getDuration() - timeline.getCurrentTime();
+        if(diff < 5) {
+            ofPushStyle();
+            ofPushMatrix();
+            ofSetColor(0,ofMap(diff, 0, 5, 255 , 0, true));
+            ofDrawRectangle(0,0,ofGetWidth(), ofGetHeight());
+            ofPopMatrix();
+            ofPopStyle();
+        }
+    }
+
+    timeline.draw();
+
+}
+
+void ofApp::drawScene() {
+    int depth = 255*zMult;
+
+    // MODE: CAM
+    if(mode == CAM) {
+        ofTranslate(-vidGrabber.getWidth() * 0.5, -vidGrabber.getHeight() * 0.5);
+    } else if( mode == IMAGE) {
+        // Draw Frame Box
+        ofSetLineWidth(1);
+        drawFrameBox(curTransX + images[idVid].getWidth() * 0.5, curTransY + images[idVid].getHeight() * 0.5, curTransZ , images[idVid].getWidth(), images[idVid].getHeight(), depth);
+
+        ofScale(1, -1, 1);
+
+        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
+    } else if(mode == VIDEO) {
+        // Draw Frame Box
+        ofSetLineWidth(1);
+        drawFrameBox(curTransX + vidPlayer[idVid].getWidth() * 0.5, curTransY + vidPlayer[idVid].getHeight() * 0.5, curTransZ , vidPlayer[idVid].getWidth(), vidPlayer[idVid].getHeight(), depth);
+
+        // if easycam y=-1
+        ofScale(1, -1, 1);
+        ofTranslate(curTransX, curTransY, curTransZ - depth*0.5);
+    }
+
+
+    // DRAW MESH
+    ofPushStyle();
+    ofNoFill();
+
+    // Process stroke size
+    ofSetLineWidth(pLineThickness);
+    glPointSize(pLineThickness);
+    glEnable(GL_POINT_SMOOTH);
+
+    mesh.draw();
+    ofPopStyle();
 }
 
 void ofApp::drawFrameBox(int _x, int _y, int _z, int _w, int _h, int _d) {
@@ -552,9 +662,48 @@ float ofApp::getMappedFreqResponse(int _f, int _inMin, int _inMax, int _outMin, 
     return (isSoundReactive) ? ofMap(_f, _inMin, _inMax, _outMin, _outMax) : 0;
 }
 
+
+
 //--------------------------------------------------------------
-// AUDIO BUFFER FROM LOADED FILE EVENT HANDLER
+// PROCESS POST GLITCH
 //--------------------------------------------------------------
+void ofApp::processPostGlitch() {
+    glEnable(GL_DEPTH_TEST);
+    fbo.begin();
+    ofClear(0,0);
+    ofClearAlpha();
+    //ofTranslate(0, ofGetHeight()*0.5);
+    cam.begin();
+
+    ofPushMatrix();
+    //translate based on size of video
+
+    drawScene();
+
+    ofPopMatrix();
+
+    cam.end();
+
+    fbo.end();
+
+
+    // Generate and apply shader effects
+    fx.generateFx();
+
+    // DRAW GENERATED FBO TO SCREEN
+    fbo.draw(0,0);
+
+    glDisable(GL_DEPTH_TEST);
+}
+
+//--------------------------------------------------------------
+// PROCESS POST PROCESSING
+//--------------------------------------------------------------
+void ofApp::processPostProcessing() {
+    fxManager.begin(cam);
+    drawScene();
+    fxManager.end();
+}
 
 
 //--------------------------------------------------------------
@@ -563,7 +712,6 @@ void ofApp::keyPressed(int key){
     if(key=='y'){
         if(yStep<150)
             yStep++;
-        
     }
     
     if(key=='u'){
@@ -571,36 +719,53 @@ void ofApp::keyPressed(int key){
             yStep--;
     }
     
-    
     if(key==' ') {
         if(vidPlayer[idVid].isPaused()) {
-            if(isSoundEnabled) {
-                mp3.setPaused(false);
+            if(isExtSoundEnabled) {
+                //mp3.setPaused(isSoundPlayPause);
             }
             vidPlayer[idVid].setPaused(false);
         }else{
-            if(isSoundEnabled) {
-                mp3.setPaused(true);
+            if(isExtSoundEnabled) {
+                //mp3.setPaused(!isSoundPlayPause);
             }
             vidPlayer[idVid].setPaused(true);
         }
     }
     
-    if (dirVid.size() > 0){
-        if(key == OF_KEY_DOWN) {
-            idVid++;
-        }else if(key == OF_KEY_UP) {
-            idVid--;
-            if(idVid < 0)
-                idVid = dirVid.size() - 1;
+    if(mode == VIDEO)
+    {
+        if (dirVid.size() > 0){
+            if(key == OF_KEY_DOWN) {
+                vidPlayer[idVid].setPaused(true);
+                mesh.clear();
+                idVid++;
+            }else if(key == OF_KEY_UP) {
+                vidPlayer[idVid].setPaused(true);
+                idVid--;
+                mesh.clear();
+                if(idVid < 0)
+                    idVid = dirVid.size() - 1;
+            }
+            idVid %= dirVid.size();
         }
-        mesh.clear();
-        
-        idVid %= dirVid.size();
+    }else if(mode == IMAGE){
+        if (images.size() > 0){
+            if(key == OF_KEY_DOWN) {
+                idVid++;
+                mesh.clear();
+            }else if(key == OF_KEY_UP) {
+                idVid--;
+                mesh.clear();
+                if(idVid < 0)
+                    idVid = images.size() - 1;
+            }
+            idVid %= images.size();
+        }
     }
     
+    
     if( key == 'p') {
-        
         isPointMode = !isPointMode;
     }
     
@@ -621,13 +786,12 @@ void ofApp::keyPressed(int key){
             zMult = 0.05;
     }
     
-    if(key == 's'){
-        isSaveEnabled = true;
-    }
-    
-    if(key == 'd') {
+    if(key == 'd') { 
         isDebug = !isDebug;
-        if(!isDebug)
+    }
+
+    if(key == 'h') {
+        if(!timeline.getIsShowing() && !isDebug)
             ofHideCursor();
         else
             ofShowCursor();
@@ -635,8 +799,23 @@ void ofApp::keyPressed(int key){
     
     if(key == 'f')
         ofToggleFullscreen();
+
+    if(key == 't') {
+        if(timeline.getIsShowing())
+            timeline.hide();
+        else
+            timeline.show();
+    }
+
+    if(timeline.getIsShowing()) {
+        if(key == 'a') {
+            cameraTrack->addKeyframe();
+        }else if(key == 'l') {
+            cameraTrack->lockCameraToTrack = !cameraTrack->lockCameraToTrack;
+        }
+    }
     
-    if(key == 'z'){
+    /*if(key == 'z'){
         saveCam.tweenNow(0, 3); // first int is what camera to tween to , secound int is time
     }
     if(key == 'x'){
@@ -654,7 +833,7 @@ void ofApp::keyPressed(int key){
     }
     if(key == 'n'){
         saveCam.tweenNow(5, 3);
-    }
+    }*/
 }
 
 //--------------------------------------------------------------
@@ -694,7 +873,7 @@ void ofApp::windowResized(int w, int h){
     settings.minFilter = GL_NEAREST;
     settings.height = h;
     settings.width = w;
-    settings.internalformat = GL_RGBA16F;
+    settings.internalformat = GL_RGBA32F;
     settings.numSamples = 4;
     
     fbo.allocate(settings);
@@ -703,6 +882,8 @@ void ofApp::windowResized(int w, int h){
     fbo.end();
     
     fx.setFbo(&fbo);
+
+    ofLogNotice() << "Window Resized: " << w << "*"<< h;
     
 }
 
@@ -748,14 +929,18 @@ void ofApp::sceneButtonPressed(int &e) {
 //--------------------------------------------------------------
 void ofApp::setupCameraSaveLoad() {
     saveCam.setup(&cam,"xml"); // add you ofeasycam and the folder where the xmls are
-    //saveCam.enableSave(); // by defaul the listion is on you can actival with enableSave;
-    saveCam.disableSave(); // or disable key save wtih this
+    saveCam.enableSave(); // by defaul the listion is on you can actival with enableSave;
+    //saveCam.disableSave(); // or disable key save wtih this
 }
 
 void ofApp::exit() {
-    for(int i = 0; i < (int)dirVid.size(); i++){
-        
-        vidPlayer[i].close();
+    if(mode == VIDEO)
+    {
+        for(int i = 0; i < (int)dirVid.size(); i++){
+            
+            vidPlayer[i].close();
+        }
     }
+    
 }
 

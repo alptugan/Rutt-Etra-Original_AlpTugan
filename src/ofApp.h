@@ -1,7 +1,11 @@
 #pragma once
 
 #include "ofMain.h"
+
+#ifdef ENABLE_SAVE
 #include "ofxToolkit.h"
+#endif
+
 // Uncomment the foloowing line to enbale midi - Input
 //#define KORG_ENABLED
 
@@ -12,12 +16,17 @@
 #include "ofxGui.h"
 #include "ofxPostGlitch.h"
 #include "ofxCameraMove.h"
-#include "ofxMotionBlurCamera.h"
-#include "ofxProcessFFT.h"
+//#include "ofxMotionBlurCamera.h"
+//#include "ofxProcessFFT.h"
+
+#include "ofxPostProcessing.h"
+#include "ofxPostProcessingManager.h"
+#include "ofxTimeline.h"
+#include "ofxTLCameraTrack.h"
+
 
 class ofApp : public ofBaseApp{
 public:
-    
     enum MODES{VIDEO=1, CAM, IMAGE};
     
     void setup();
@@ -39,7 +48,15 @@ public:
     void setupCameraSaveLoad();
     void setupVideos(string _folder);
     void setupImages(string _folder);
+    void setSoundLevel(float & val);
     void setTranslationPoints();
+    void setVideoSoundEnabled(bool & val);//isSoundVideoEnabledHandler
+    void drawScene();
+    void processPostGlitch();
+    void processPostProcessing();
+    
+    // CUSTOM GUI METHODS
+    void isSoundEnabledHandler(bool & val);
     
     // SETTERS & GETTERS
     float getMappedFreqResponse(int _f, int _inMin, int _inMax, int _outMin, int _outMax);
@@ -49,6 +66,7 @@ public:
     
     // GUI
     ofxPanel gui;
+    ofParameter<bool> isPostGlitchEnabled;
     ofParameter<int> pLineThickness;
     ofParameterGroup fxTypes;
     ofParameter<bool> converge;
@@ -71,8 +89,11 @@ public:
     
     // Sound Player Parameters
     ofParameterGroup soundGUI;
+    ofParameter<string> soundFilePath;
     ofParameter<bool> isSoundReactive;
-    ofParameter<bool> isSoundEnabled;
+    ofParameter<bool> isExtSoundEnabled;
+    ofParameter<bool> isVideoSoundEnabled;
+    ofParameter<bool> isSoundPlayPause;
     ofParameter<float> soundLevel;
     
     // Mesh Parameters
@@ -87,6 +108,8 @@ public:
     
     // Glow FX GUI
     ofParameter<int> glowAmount;
+
+
     
 #ifdef KORG_ENABLED
     // Korg GUI
@@ -101,10 +124,15 @@ public:
     void korgPotChanged(int & _val);
     void sceneButtonPressed(int & _val);
 #endif
+
+#ifdef ENABLE_SAVE
     // OFX TOOLKIT
     ofxToolKit tools;
-    
+    bool isSaveEnabled;
+#endif
+
     // FX
+    ofxPostProcessingManager fxManager;
     ofxPostGlitch fx;
     ofFbo fbo;
     void updateFXParameters();
@@ -121,9 +149,6 @@ public:
     int 				camWidth;
     int 				camHeight;
     
-    
-
-    
     // Main Scene Mesh
     ofMesh mesh;
     ofColor meshColor;
@@ -133,21 +158,19 @@ public:
     
     // Video Directory
     ofDirectory dirVid;
-    
-    
-    
+
     // Random rotation variables
     ofColor color;
     
-    ofVec3f pos;
+    glm::vec3 pos;
     ofQuaternion rot;
     ofMatrix4x4 mat;
-    ofVec3f rotationAxis;
+    glm::vec3 rotationAxis;
     
-    ofVec3f defCamPos;
-    ofVec3f contTrans;
-    ofVec3f contRot;
-    ofVec3f camPos;
+    glm::vec3 defCamPos;
+    glm::vec3 contTrans;
+    glm::vec3 contRot;
+    glm::vec3 camPos;
     
     int idVid;               // Video id
     int bufferCounter;
@@ -169,15 +192,23 @@ public:
     ofEasyCam cam;
 
     bool isDebug;
-    bool isSaveEnabled;
     
     
     // Sound Player Analysis Parameters
-    ProcessFFT fft;
+    void setPaused(bool & val);
+    //ProcessFFT fft;
     ofSoundPlayer 		mp3;
     
     float prevx, prevy;
     
     string folderPath;
+
+    // OFX TIMELINE
+    ofxTimeline timeline;
+    ofxTLCameraTrack* cameraTrack;
+    void initTimeline();
+    void bangFired(ofxTLBangEventArgs& args);
+    void switchFired(ofxTLSwitchEventArgs& args);
+    void switchFired2(ofxTLSwitchEventArgs& args);
 
 };
